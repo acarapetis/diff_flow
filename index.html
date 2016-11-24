@@ -1,0 +1,22 @@
+<html>
+  <head>
+    <title>Diffeomorphism Flow</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <meta name=viewport content="width=device-width, initial-scale=1, maximum-scale=1">
+  </head>
+  <body>
+    <div id="controls">
+      <input type="checkbox" name="toggle_flow" id="toggle_flow"> Toggle flow <br>
+      <input type="range" name="timestep" min="1" max="10" value="1" id="timestep"> Timestep <br>
+      <input type="range" name="dcoeff" min="1" max="10" value="5" id="dcoeff"> Brush Size<br>
+      <input type="button" name="reset" id="reset" value="Reset to Identity">
+      <input type="button" name="shear" id="shear" value="Reset to Shear"><br>
+      <input type="range" name="size" id="size" value="10" min="5" max="50">Grid Size
+    </div>
+
+    <canvas id="canvas"></canvas>
+    <script type="text/javascript" src="main.js"></script>
+  </body>
+</html>
+
