@@ -1,3 +1,79 @@
+// {{{ 2x2 Matrices
+var M22 = function(a,b,c,d) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = d;
+};
+
+M22.prototype.multL = function(o) { // o * this
+    return new M22(
+            o.a * this.a + o.b * this.c,
+            o.a * this.b + o.b * this.d,
+            o.c * this.a + o.d * this.c,
+            o.c * this.b + o.d * this.d
+    );
+};
+
+M22.prototype.transform = function(v) { // this * v
+    return {
+        x: this.a * v.x + this.b * v.y,
+        y: this.c * v.x + this.d * v.y
+    };
+};
+
+M22.prototype.scale = function(s) { // s this
+    return new M22(a*s,b*s,c*s,d*s);
+};
+// }}}
+// {{{ (Non-projective) Modular Group
+// Generators S,T,-
+// S = J, T = shear, - = -Id
+// Ss = Tt = -- = Id
+// Relations S^2 = (ST)^3 = -
+var MS = new M22(0,-1,1,0);
+var MSinv = new M22(0,1,-1,0);
+var MT = new M22(1,1,0,1);
+var MTinv = new M22(1,-1,0,1);
+var Mneg = new M22(-1,0,0,-1);
+var Mid = new M22(1,0,0,1);
+
+var word_reduce = function(w) {
+    // We're not solving the word problem here. Just doing our best.
+    var v;
+    do {
+        v = w;
+        w = w.replace(/SS|ss|STSTST|tststs/g,'-');
+        w = w.replace(/Ss|sS|Tt|tT/g,'');
+        minuses = (w.match(/-/g) || []).length;
+        w = (minuses % 2 == 0 ? '' : '-') + w.replace(/-/g,'');
+    } while (v != w);
+    return w;
+};
+
+var Word = function(w) {
+    this.w = word_reduce(w) || '';
+};
+
+Word.prototype.toString = function() {
+    return this.w;
+};
+
+var char_to_matrix = function(c) {
+    mapping = {
+        '-' : Mneg,
+        S: MS, s: MSinv,
+        T: MT, t: MTinv
+    };
+    return mapping[c];
+}
+
+Word.prototype.toMatrix = function() {
+    return this.w.split('').reduceRight(function(r,l) {
+        return r.multL(char_to_matrix(l));
+    }, Mid);
+};
+// }}}
 var grid_size = 10;
 var draw_scale = 50;
 var canvas = $('canvas')[0];
@@ -13,6 +89,9 @@ var resize = function() {
           ||  ctx.backingStorePixelRatio || 1;
     var PIXEL_RATIO = dpr/bsr;
 
+
+    // canvas.width is in real/canvas pixels
+    // $(canvas).width() is in css pixels
     canvas.width    = $('canvas').width() * PIXEL_RATIO;
     canvas.height   = $('canvas').height() * PIXEL_RATIO;
     ctx.translate(0.5,0.5);
@@ -31,13 +110,13 @@ var Torus = function (w,h,initf) {
     this.data = [];
 
     if (initf === undefined) {
-        initf = function(x,y) { return null; };
+        initf = function(x,y) { return { x: x, y: y }; };
     }
 
     for (var i = 0; i < w; i++) {
         var col = [];
         for (var j = 0; j < h; j++) {
-            col.push(initf(i,j));
+            col.push(this.crop(initf(i,j)));
         }
         this.data.push(col);
     }
@@ -87,6 +166,18 @@ Torus.prototype.grad = function (x,y,f) {
         (f(this.el(x+1,y)) - f(this.el(x-1,y)))/2,
         (f(this.el(x,y+1)) - f(this.el(x,y+1)))/2
     ];
+};
+
+var hsl = function (h,s,l) {
+    // All args in [0,1)
+    return 'hsl('  + Math.round(h*360).toString() 
+            +  ',' + Math.round(s*100).toString()
+            + '%,' + Math.round(l*100).toString()
+            + '%)';
+};
+
+Torus.prototype.domain_colour = function (x,y) {
+    return hsl(x/this.width, 1, 0.6 + 0.3*Math.sin(2*Math.PI*y/this.height));
 };
 
 var xc = function(e) { return e.x; };
@@ -182,8 +273,8 @@ Torus.prototype.draw_on = function(c) {
     tt = this;
     this.each_el(function(e,x,y) {
         tt.SEneighbours(x,y).forEach(function(e2) {
-            c.strokeStyle='#000000';
-            c.lineWidth=1;
+            c.strokeStyle = tt.domain_colour(x,y);
+            c.lineWidth   = 2;
             tt.draw_edge_on(c,e2,e);
         });
     });
@@ -224,7 +315,9 @@ var hmhf_step = function(t, dt) {
 var myflow_step = function(t, dt) {
     return new Torus(t.width, t.height, function(x,y) {
         var j = t.jac(x,y);
-        var r = j[0][0] * j[0][0] + j[0][1] * j[0][1] + j[1][0] * j[1][0] + j[1][1] * j[1][1]
+        // r = (u1 + u2)^2
+        var r = j[0][0] * j[0][0] + j[0][1] * j[0][1] 
+                + j[1][0] * j[1][0] + j[1][1] * j[1][1]
                 + 2*(j[0][0]*j[1][1] - j[0][1]*j[1][0]);
         return t.crop(vadd(t.el(x,y), vscale(t.lap(x,y),dt/r)));
     });
@@ -240,22 +333,20 @@ ctx.tdraw_circle = function(x,y,r) {
 }
 */
 
-var dragging = false;
-var drag_origin;
 var mouse_pos;
 
 var bump = function(x2) {
     return x2 > 1 ? 0 : Math.exp(-1/(1-x2));
 }
 
-var mousemove = function(evt) {
+var mousemove = function(evt, touch) {
     var rect = canvas.getBoundingClientRect();
     var old_pos = mouse_pos;
     mouse_pos = {
         x: (evt.clientX-rect.left)/(rect.right-rect.left)*canvas.width/real_scale,
         y: (evt.clientY-rect.top)/(rect.bottom-rect.top)*canvas.height/real_scale
     };
-    if (dragging) {
+    if (('buttons' in evt && evt.buttons == 1) || (touch && old_pos !== false)) {
         var impulse = t.minus(mouse_pos, old_pos);
         var drag_coeff = $('#dcoeff')[0].value;
         t.mutate_el(function(e1,i,j) {
@@ -266,10 +357,12 @@ var mousemove = function(evt) {
 };
 $(canvas).on('mousemove',mousemove);
 $(canvas).on('touchmove', function(e) { 
-    mousemove(e.originalEvent.changedTouches[0]); 
+    mousemove(e.originalEvent.changedTouches[0], true); 
     return false;
 });
+$(canvas).on('touchend', function(e) { mouse_pos = false; });
 
+/*
 var mousedown = function(e) {
     if (('button' in e) && e.button > 0) return;
     mousemove(e);
@@ -287,20 +380,11 @@ $(canvas).on('mouseup touchend', function(e) {
     if (!dragging) return;
     if (('button' in e) && e.button > 0) return;
     dragging = false;
-    /*
-    var drag_terminus = mouse_pos;
-    var impulse = t.minus(drag_terminus, drag_origin);
-    var drag_coeff = $('#dcoeff')[0].value;
-    t.mutate_el(function(e1,i,j) {
-        var scal = Math.exp(-drag_coeff*t.d2(e1,drag_origin)/(t.width*t.height));
-        return t.crop(vadd(e1, vscale(impulse,scal)));
-    });
-    draw();
-    */
 });
+*/
 
 
-var t;
+var t, idt;
 
 var draw = function() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -313,7 +397,6 @@ var tick = function() {
     }
 };
 var reset = function(f) {
-    console.log(grid_size);
     if (f === undefined) {
         f = function(x,y) { return { x: x, y: y }; };
     }
@@ -347,6 +430,7 @@ $(window).on('load',function() {
     draw_scale = 300/grid_size;
     $('canvas').width(grid_size * draw_scale).height(grid_size * draw_scale);
     resize_reset();
+    idt = new Torus(grid_size, grid_size);
     t = new Torus(grid_size,grid_size,function(x,y) { return {
         x: x +0.4*Math.cos(2*Math.PI*y/grid_size),
         y: y +0.4*Math.sin(2*Math.PI*x/grid_size)

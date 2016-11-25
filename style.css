@@ -17,6 +17,20 @@ canvas {
     display: block;
     margin: 0 auto;
     padding: 0;
-    border: 5px solid #777;
+    border-top: 3px dashed #333;
+    border-bottom: 3px dashed #333;
+    border-left: 3px dotted #333;
+    border-right: 3px dotted #333;
     -ms-touch-action: none;
+    cursor: move;
+    cursor: -moz-grab;
+    cursor: -webkit-grab;
+    cursor: grab;
+}
+
+canvas:active {
+    cursor: move;
+    cursor: -moz-grabbing;
+    cursor: -webkit-grabbing;
+    cursor: grabbing;
 }
