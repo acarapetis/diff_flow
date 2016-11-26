@@ -444,17 +444,17 @@ var reset = function(f) {
     t = new Torus(grid_size,grid_size,f);
     draw();
 };
-$('#reset').on('click', function() { 
-    reset(function(x,y){
-        return {x: x, y:y};
-    });
-});
 
-$('#shear').on('click', function() { 
-    reset(function(x,y){
-        return {x: x, y:x+y};
+var word_reset = function() {
+    var input = $('#word')[0];
+    var w = new Word(input.value.replace(/[^-stST]/g,''));
+    input.value = w.toString();
+    var m = w.toMatrix();
+    reset(function(x,y) {
+        return m.transform({x: x, y: y});
     });
-});
+};
+$('#word_reset').on('click', word_reset);
 
 var resize_reset = function() {
     grid_size = parseInt($('#size')[0].value);
@@ -462,16 +462,16 @@ var resize_reset = function() {
     real_scale = glw/(grid_size);
     plane = new PIXI.mesh.Plane(texture, grid_size + 1, grid_size + 1);
     idt = new Torus(grid_size, grid_size);
+    word_reset();
     //resize();
-    reset();
+    //reset();
 };
 
 var render = function() {
     requestAnimationFrame(render);
 
-    // hack to cover up seams
-    var w=glw-2;
-    var h=glh-2;
+    var w=glw;
+    var h=glh;
 
     // render a bunch of translates 
 	for (var i = -3; i <= 3; i++) {
