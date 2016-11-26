@@ -11,6 +11,10 @@
   <body>
     <div id="controls">
       <input type="checkbox" name="toggle_flow" id="toggle_flow" checked="checked"> Toggle flow <br>
+      <select id="flow">
+        <option value="diff" selected="selected">Diffeomorphism-preserving flow</option>
+        <option value="hmhf">Harmonic map heat flow</option>
+      </select><br>
       <input type="range" name="timestep" min="1" max="10" value="1" id="timestep"> Timestep <br>
       <input type="range" name="dcoeff" min="1" max="10" value="5" id="dcoeff"> Brush Size<br>
       <p>Use words in the generators 

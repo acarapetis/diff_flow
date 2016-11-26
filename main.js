@@ -425,10 +425,17 @@ var draw = function() {
     //ctx.clearRect(0,0,canvas.width,canvas.height);
     //t.draw_on(ctx);
 };
+
+var flow_step = {
+    diff: myflow_step,
+    hmhf: hmhf_step
+};
+
 var tick = function() {
     draw();
+    var step_fn = flow_step[$('#flow')[0].value];
     if ($('#toggle_flow')[0].checked) {
-        t = myflow_step(t,$('#timestep')[0].value/100);
+        t = step_fn(t,$('#timestep')[0].value/100);
     }
 	t.update_plane(plane);
     var cm = t.CM();
