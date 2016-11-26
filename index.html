@@ -14,9 +14,23 @@
       <input type="range" name="dcoeff" min="1" max="10" value="5" id="dcoeff"> Brush Size<br>
       <input type="button" name="reset" id="reset" value="Reset to Identity">
       <input type="button" name="shear" id="shear" value="Reset to Shear"><br>
-      <input type="range" name="size" id="size" value="15" min="5" max="50">Grid Resolution
+      <input type="range" name="size" id="size" value="20" min="5" max="50">Grid Resolution<br>
+      <input type="checkbox" name="draw_grid" id="draw_grid" checked="checked"> Draw grid
+      <input type="checkbox" name="colour_grid" id="colour_grid"> Coloured grid <br>
+      Image: <select id="image">
+        <option value="chocdonut.png">donut</option>
+        <option value="blank.png">blank</option>
+        <option value="pacmansquare.png">pacman</option>
+        <option value="horsemen-square.png">escher</option>
+      </select> <br>
+      <!--<input type="checkbox" id="show_domain">Show domain-->
     </div>
 
+    <!--
+    <div id="domdiv">
+      <canvas id="domain"></canvas>&rarr;
+    </div>
+    -->
     <canvas id="canvas"></canvas>
     <script type="text/javascript" src="main.js"></script>
   </body>

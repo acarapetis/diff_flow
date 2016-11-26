@@ -77,26 +77,25 @@ Word.prototype.toMatrix = function() {
 var grid_size = 10;
 var draw_scale = 50;
 var canvas = $('canvas')[0];
-var ctx = canvas.getContext('2d');
-var real_scale = draw_scale;
-var resize = function() {
-    // Make sure 1 canvas pixel = 1 screen pixel
+var renderer, plane, gfx, texture;
+var glw, glh;
+var t, idt;
+var coloured_grid = false;
+var pixel_ratio = function() {
     var dpr = window.devicePixelRatio || 1;
+    var ctx;
+    try { ctx = canvas.getContext('webgl'); }
+    catch(e) { ctx = canvas.getContext('2d'); }
+
     var bsr = ctx.webkitBackingStorePixelRatio 
           ||  ctx.mozBackingStorePixelRatio
           ||  ctx.msBackingStorePixelRatio
           ||  ctx.oBackingStorePixelRatio
           ||  ctx.backingStorePixelRatio || 1;
-    var PIXEL_RATIO = dpr/bsr;
+    console.log(dpr/bsr);
+    return dpr/bsr;
+}
 
-
-    // canvas.width is in real/canvas pixels
-    // $(canvas).width() is in css pixels
-    canvas.width    = $('canvas').width() * PIXEL_RATIO;
-    canvas.height   = $('canvas').height() * PIXEL_RATIO;
-    ctx.translate(0.5,0.5);
-    real_scale = PIXEL_RATIO * draw_scale;
-};
 
 // Fix mod to target [0,n)
 var mod = function(m,n) {
@@ -116,7 +115,8 @@ var Torus = function (w,h,initf) {
     for (var i = 0; i < w; i++) {
         var col = [];
         for (var j = 0; j < h; j++) {
-            col.push(this.crop(initf(i,j)));
+            //col.push(this.crop(initf(i,j)));
+            col.push(initf(i,j));
         }
         this.data.push(col);
     }
@@ -168,17 +168,51 @@ Torus.prototype.grad = function (x,y,f) {
     ];
 };
 
-var hsl = function (h,s,l) {
-    // All args in [0,1)
-    return 'hsl('  + Math.round(h*360).toString() 
-            +  ',' + Math.round(s*100).toString()
-            + '%,' + Math.round(l*100).toString()
-            + '%)';
-};
+var hsl = function(h, s, l) {
+    var r, g, b;
+
+    if(s == 0){
+        r = g = b = l; // achromatic
+    }else{
+        var hue2rgb = function hue2rgb(p, q, t){
+            if(t < 0) t += 1;
+            if(t > 1) t -= 1;
+            if(t < 1/6) return p + (q - p) * 6 * t;
+            if(t < 1/2) return q;
+            if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        }
+
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+    }
+
+    return 0x10000 * Math.round(r * 255) + 0x100 * Math.round(g * 255)+ Math.round(b * 255);
+}
 
 Torus.prototype.domain_colour = function (x,y) {
     return hsl(x/this.width, 1, 0.6 + 0.3*Math.sin(2*Math.PI*y/this.height));
 };
+
+Torus.prototype.CM = function() {
+    var xb = 0, yb = 0;
+    this.each_el(function(e) {
+        xb += e.x;
+        yb += e.y;
+    });
+    xb /= this.width * this.height;
+    yb /= this.width * this.height;
+    return {x: xb, y: yb};
+}
+
+Torus.prototype.translateAll = function(dx,dy) {
+    this.mutate_el(function(e) {
+        return { x: e.x + dx, y: e.y + dy};
+    });
+}
 
 var xc = function(e) { return e.x; };
 var yc = function(e) { return e.y; };
@@ -225,13 +259,11 @@ Torus.prototype.lap = function(x,y) {
 };
 
 Torus.prototype.draw_edge_on = function(c,u,e) {
-    var d = tt.minus(u,e);
+    var d = this.minus(u,e);
     var z = vadd(e,d);
     var do_edge = function(x1,y1,x2,y2) {
-        c.beginPath();
         c.moveTo(x1 * real_scale, y1 * real_scale);
         c.lineTo(x2 * real_scale, y2 * real_scale);
-        c.stroke();
     };
     
     // Draw fundamental representative:
@@ -271,34 +303,39 @@ Torus.prototype.draw_edge_on = function(c,u,e) {
 
 Torus.prototype.draw_on = function(c) {
     tt = this;
+    c.lineStyle(1, 0, 1);
     this.each_el(function(e,x,y) {
         tt.SEneighbours(x,y).forEach(function(e2) {
-            c.strokeStyle = tt.domain_colour(x,y);
-            c.lineWidth   = 2;
-            tt.draw_edge_on(c,e2,e);
+            if (coloured_grid) {
+                c.lineStyle(2,tt.domain_colour(x,y),1);
+            }
+            tt.draw_edge_on(c,tt.crop(e2),tt.crop(e));
         });
     });
-        /*
-    this.each_el(function(e,x,y) {
-        var v = tt.lap(x,y);
-        
-        c.beginPath();
-        c.arc(e.x * real_scale,e.y * real_scale, 0.1 * real_scale, 0, 2*Math.PI);
-        c.closePath();
-        c.fill();
-
-        c.strokeStyle='#FF0000';
-        c.lineWidth=4;
-        c.beginPath();
-        c.moveTo(e.x * real_scale, e.y * real_scale);
-        c.lineTo((e.x + 10*v.x) * real_scale, (e.y+10*v.y)*real_scale);
-        c.stroke();
-    });*/
 };
 
 Torus.prototype.crop = function(e) {
     return { x: mod(e.x, this.width), y: mod(e.y, this.height) };
 }
+
+Torus.prototype.update_plane = function(p) {
+	var t = this;
+    for (var x = 0; x <= t.width; x++) {
+        for (var y = 0; y <= t.height; y++) {
+            var e = t.el(x%t.width,y%t.height);
+			var ee = e;
+            if (x == t.width || y == t.height) {
+                var prev = (x == t.width) ? 
+					((y == t.width) ? t.el(t.width - 1, t.height - 1) : t.el(t.width - 1, y%t.height)) : 
+					t.el(x%t.height, t.height - 1);
+				ee = vadd(prev,t.minus(e,prev));
+            }
+            p.vertices[2*(t.width+1)*y + 2*x] = (ee.x/t.width)*glw;
+            p.vertices[2*(t.width+1)*y + 2*x+1] = (ee.y/t.height)*glh;
+        }
+    }
+};
+
 
 var tor_add = function(t,s) {
     return new Torus(t.width,t.height,function(x,y) { 
@@ -319,7 +356,7 @@ var myflow_step = function(t, dt) {
         var r = j[0][0] * j[0][0] + j[0][1] * j[0][1] 
                 + j[1][0] * j[1][0] + j[1][1] * j[1][1]
                 + 2*(j[0][0]*j[1][1] - j[0][1]*j[1][0]);
-        return t.crop(vadd(t.el(x,y), vscale(t.lap(x,y),dt/r)));
+        return (vadd(t.el(x,y), vscale(t.lap(x,y),dt/r)));
     });
 }
 
@@ -343,15 +380,15 @@ var mousemove = function(evt, touch) {
     var rect = canvas.getBoundingClientRect();
     var old_pos = mouse_pos;
     mouse_pos = {
-        x: (evt.clientX-rect.left)/(rect.right-rect.left)*canvas.width/real_scale,
-        y: (evt.clientY-rect.top)/(rect.bottom-rect.top)*canvas.height/real_scale
+        x: (evt.clientX-rect.left)/(rect.right-rect.left) * t.width,
+        y: (evt.clientY-rect.top)/(rect.bottom-rect.top) * t.height
     };
     if (('buttons' in evt && evt.buttons == 1) || (touch && old_pos !== false)) {
         var impulse = t.minus(mouse_pos, old_pos);
         var drag_coeff = $('#dcoeff')[0].value;
         t.mutate_el(function(e1,i,j) {
             var scal = bump(t.d2(e1,old_pos)/(0.01*t.width*t.width*drag_coeff*drag_coeff))
-            return t.crop(vadd(e1, vscale(impulse,scal)));
+            return vadd(e1, vscale(impulse,scal));
         });
     }
 };
@@ -384,17 +421,21 @@ $(canvas).on('mouseup touchend', function(e) {
 */
 
 
-var t, idt;
-
 var draw = function() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    t.draw_on(ctx);
+    //ctx.clearRect(0,0,canvas.width,canvas.height);
+    //t.draw_on(ctx);
 };
 var tick = function() {
     draw();
     if ($('#toggle_flow')[0].checked) {
         t = myflow_step(t,$('#timestep')[0].value/100);
     }
+	t.update_plane(plane);
+    var cm = t.CM();
+    if (cm.x > 1.1*t.width)     t.translateAll(-t.width, 0);
+    if (cm.x < -0.1*t.width)    t.translateAll(t.width, 0);
+    if (cm.y > 1.1*t.height)    t.translateAll(0, -t.height);
+    if (cm.y < -0.1*t.height)   t.translateAll(0, t.height);
 };
 var reset = function(f) {
     if (f === undefined) {
@@ -411,30 +452,89 @@ $('#reset').on('click', function() {
 
 $('#shear').on('click', function() { 
     reset(function(x,y){
-        return t.crop({x: x, y:x+y});
+        return {x: x, y:x+y};
     });
 });
 
 var resize_reset = function() {
     grid_size = parseInt($('#size')[0].value);
-    draw_scale = 300/grid_size;
-    resize();
+    draw_scale = canvas.width/grid_size;
+    real_scale = glw/(grid_size);
+    plane = new PIXI.mesh.Plane(texture, grid_size + 1, grid_size + 1);
+    idt = new Torus(grid_size, grid_size);
+    //resize();
     reset();
 };
 
-$('#size').on('input change', resize_reset);
+var render = function() {
+    requestAnimationFrame(render);
 
-$(window).on('resize orientationchange', function() { resize(); draw(); });
+    // hack to cover up seams
+    var w=glw-2;
+    var h=glh-2;
+
+    // render a bunch of translates 
+	for (var i = -3; i <= 3; i++) {
+		for (var j = -3; j <= 3; j++) {
+            plane.position = new PIXI.Point(w*i, h*j);
+            renderer.render(plane,null,false);
+		}
+	}
+
+    // draw grid
+    if (t === undefined || !$('#draw_grid')[0].checked) return;
+    gfx.clear();
+    t.draw_on(gfx);
+    renderer.render(gfx,null,false);
+};
+
+$('#size').on('input change', resize_reset);
+$('#colour_grid').on('change', function() {
+    coloured_grid = $('#colour_grid')[0].checked;
+});
+$('#image').on('change', function() {
+    texture = PIXI.Texture.fromImage($('#image')[0].value);
+    plane.texture = texture;
+    //$('#domain')[0].src = $('#image')[0].value;
+    //resize_reset();
+});
+/*
+$('#show_domain').on('change', function() {
+    if ($('#show_domain')[0].value) {
+        $('#domdiv').show();
+    } else {
+        $('#domdiv').hide();
+    }
+});
+*/
+
+//$(window).on('resize orientationchange', function() { resize(); draw(); });
 $(window).on('load',function() {
-    grid_size = parseInt($('#size')[0].value);
-    draw_scale = 300/grid_size;
-    $('canvas').width(grid_size * draw_scale).height(grid_size * draw_scale);
+    //grid_size = parseInt($('#size')[0].value);
+    //draw_scale = 300/grid_size;
+    //$('canvas').width(grid_size * draw_scale).height(grid_size * draw_scale);
+    //resize_reset();
+    //
+    //$('#show_domain').trigger('change');
+    canvas.width = 512;
+    canvas.height = 512;
+    $(canvas).css('max-width','92%').css('height','auto');
+    glw = glh = Math.min($(canvas).width(), $(canvas).height());
+    renderer = PIXI.autoDetectRenderer(glw,glh, {
+        view: canvas,
+        backgroundColor: 0xffffff,
+        resolution: pixel_ratio()
+    });
+    window.scrollTo(0,1);
+
+    texture = PIXI.Texture.fromImage($('#image')[0].value);
+    gfx = new PIXI.Graphics();
+
+    // Initialize data structures and mesh
     resize_reset();
-    idt = new Torus(grid_size, grid_size);
-    t = new Torus(grid_size,grid_size,function(x,y) { return {
-        x: x +0.4*Math.cos(2*Math.PI*y/grid_size),
-        y: y +0.4*Math.sin(2*Math.PI*x/grid_size)
-    }; });
-    draw();
+
+    // Start render loop
+    render();
+
     setInterval(tick,15);
 });
