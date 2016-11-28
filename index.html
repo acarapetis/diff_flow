@@ -9,8 +9,8 @@
     <script type="text/javascript" async src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML"> </script>
   </head>
   <body>
-    <div id="controls">
-      <input type="checkbox" name="toggle_flow" id="toggle_flow" checked="checked"> Toggle flow <br>
+    <div id="controls"><form>
+      <input type="checkbox" name="toggle_flow" id="toggle_flow"> Toggle flow <br>
       <select id="flow">
         <option value="diff" selected="selected">Diffeomorphism-preserving flow</option>
         <option value="hmhf">Harmonic map heat flow</option>
@@ -24,7 +24,7 @@
       to describe a linear symplectomorphism:</p>
       <input type="text" id="word"></input> <input type="button" id="word_reset" value="Reset in SL(2,Z)"> <br>
       <input type="range" name="size" id="size" value="20" min="5" max="50">Grid Resolution<br>
-      <input type="checkbox" name="draw_grid" id="draw_grid" checked="checked"> Draw grid
+      <input type="checkbox" name="draw_grid" id="draw_grid"> Draw grid
       <input type="checkbox" name="colour_grid" id="colour_grid"> Coloured grid <br>
       Image: <select id="image">
         <option value="chocdonut.png">donut</option>
@@ -33,7 +33,7 @@
         <option value="horsemen-square.png">escher</option>
       </select> <br>
       <!--<input type="checkbox" id="show_domain">Show domain-->
-    </div>
+  </form></div>
 
     <!--
     <div id="domdiv">

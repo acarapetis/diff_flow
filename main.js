@@ -74,29 +74,7 @@ Word.prototype.toMatrix = function() {
     }, Mid);
 };
 // }}}
-var grid_size = 10;
-var draw_scale = 50;
-var canvas = $('canvas')[0];
-var renderer, plane, gfx, texture;
-var glw, glh;
-var t, idt;
-var coloured_grid = false;
-var pixel_ratio = function() {
-    var dpr = window.devicePixelRatio || 1;
-    var ctx;
-    try { ctx = canvas.getContext('webgl'); }
-    catch(e) { ctx = canvas.getContext('2d'); }
-
-    var bsr = ctx.webkitBackingStorePixelRatio 
-          ||  ctx.mozBackingStorePixelRatio
-          ||  ctx.msBackingStorePixelRatio
-          ||  ctx.oBackingStorePixelRatio
-          ||  ctx.backingStorePixelRatio || 1;
-    console.log(dpr/bsr);
-    return dpr/bsr;
-}
-
-
+// {{{ Torus data structure
 // Fix mod to target [0,n)
 var mod = function(m,n) {
     return ((m%n)+n)%n;
@@ -206,13 +184,26 @@ Torus.prototype.CM = function() {
     xb /= this.width * this.height;
     yb /= this.width * this.height;
     return {x: xb, y: yb};
-}
+};
 
 Torus.prototype.translateAll = function(dx,dy) {
     this.mutate_el(function(e) {
         return { x: e.x + dx, y: e.y + dy};
     });
-}
+};
+
+var eps = 1;
+Torus.prototype.badIC = function(x,y) {
+    x /= this.width;
+    y /= this.height;
+    x -= 0.5;
+    y -= 0.5;
+    var b = bump(Math.sqrt(x*x+y*y)*2);
+    return vscale(vadd({
+        x: b*(eps * x - x*x*x) + (1-b)*x,
+        y: b*(y*(1-x)) + (1-b)*y
+    },{x:0.5, y:0.5}),this.width);
+};
 
 var xc = function(e) { return e.x; };
 var yc = function(e) { return e.y; };
@@ -335,14 +326,8 @@ Torus.prototype.update_plane = function(p) {
         }
     }
 };
-
-
-var tor_add = function(t,s) {
-    return new Torus(t.width,t.height,function(x,y) { 
-        return vadd(t.el(x,y), s.el(x,y));
-    });
-}
-
+// }}}
+// {{{ Flow step operators
 var hmhf_step = function(t, dt) {
     return new Torus(t.width, t.height, function(x,y) {
         return vadd(t.el(x,y), vscale(t.lap(x,y),dt));
@@ -360,20 +345,37 @@ var myflow_step = function(t, dt) {
     });
 }
 
-/*
-ctx.tdraw_circle = function(x,y,r) {
-    x = mod(x,
-    c.beginPath();
-    c.arc(x * draw_scale,y * draw_scale, r * draw_scale, 0, 2*Math.PI);
-    c.closePath();
-    c.fill();
-}
-*/
+var flow_step = {
+    diff: myflow_step,
+    hmhf: hmhf_step
+};
+// }}}
 
 var mouse_pos;
+var grid_size = 10;
+var draw_scale = 50;
+var canvas = $('canvas')[0];
+var renderer, plane, gfx, texture;
+var glw, glh;
+var t, idt;
+var coloured_grid = false;
+var pixel_ratio = function() {
+    var dpr = window.devicePixelRatio || 1;
+    var ctx;
+    try { ctx = canvas.getContext('webgl'); }
+    catch(e) { ctx = canvas.getContext('2d'); }
+
+    var bsr = ctx.webkitBackingStorePixelRatio 
+          ||  ctx.mozBackingStorePixelRatio
+          ||  ctx.msBackingStorePixelRatio
+          ||  ctx.oBackingStorePixelRatio
+          ||  ctx.backingStorePixelRatio || 1;
+    console.log(dpr/bsr);
+    return dpr/bsr;
+}
 
 var bump = function(x2) {
-    return x2 > 1 ? 0 : Math.exp(-1/(1-x2));
+    return x2 > 1 ? 0 : Math.exp(-1/(1-x2))*Math.E;
 }
 
 var mousemove = function(evt, touch) {
@@ -387,7 +389,7 @@ var mousemove = function(evt, touch) {
         var impulse = t.minus(mouse_pos, old_pos);
         var drag_coeff = $('#dcoeff')[0].value;
         t.mutate_el(function(e1,i,j) {
-            var scal = bump(t.d2(e1,old_pos)/(0.01*t.width*t.width*drag_coeff*drag_coeff))
+            var scal = bump(t.d2(e1,old_pos)/(0.01*t.width*t.width*drag_coeff*drag_coeff))/2;
             return vadd(e1, vscale(impulse,scal));
         });
     }
@@ -399,36 +401,9 @@ $(canvas).on('touchmove', function(e) {
 });
 $(canvas).on('touchend', function(e) { mouse_pos = false; });
 
-/*
-var mousedown = function(e) {
-    if (('button' in e) && e.button > 0) return;
-    mousemove(e);
-    dragging = true;
-    drag_origin = mouse_pos;
-    return false;
-}
-$(canvas).on('mousedown',mousedown);
-$(canvas).on('touchstart', function(e) {
-    mousedown(e.originalEvent.changedTouches[0]); 
-    return false;
-});
-
-$(canvas).on('mouseup touchend', function(e) {
-    if (!dragging) return;
-    if (('button' in e) && e.button > 0) return;
-    dragging = false;
-});
-*/
-
-
 var draw = function() {
     //ctx.clearRect(0,0,canvas.width,canvas.height);
     //t.draw_on(ctx);
-};
-
-var flow_step = {
-    diff: myflow_step,
-    hmhf: hmhf_step
 };
 
 var tick = function() {
@@ -515,14 +490,7 @@ $('#show_domain').on('change', function() {
 });
 */
 
-//$(window).on('resize orientationchange', function() { resize(); draw(); });
 $(window).on('load',function() {
-    //grid_size = parseInt($('#size')[0].value);
-    //draw_scale = 300/grid_size;
-    //$('canvas').width(grid_size * draw_scale).height(grid_size * draw_scale);
-    //resize_reset();
-    //
-    //$('#show_domain').trigger('change');
     canvas.width = 512;
     canvas.height = 512;
     $(canvas).css('max-width','92%').css('height','auto');
@@ -545,3 +513,4 @@ $(window).on('load',function() {
 
     setInterval(tick,15);
 });
+
