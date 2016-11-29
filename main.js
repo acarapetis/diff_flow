@@ -249,7 +249,7 @@ Torus.prototype.lap = function(x,y) {
                .reduce(function(a,b){ return vadd(a,b); },{x:0,y:0});
 };
 
-Torus.prototype.draw_edge_on = function(c,u,e) {
+Torus.prototype.draw_edge_on = function(c,u,e,real_scale) {
     var d = this.minus(u,e);
     var z = vadd(e,d);
     var do_edge = function(x1,y1,x2,y2) {
@@ -292,7 +292,7 @@ Torus.prototype.draw_edge_on = function(c,u,e) {
 
 };
 
-Torus.prototype.draw_on = function(c) {
+Torus.prototype.draw_on = function(c,coloured_grid,real_scale) {
     tt = this;
     c.lineStyle(1, 0, 1);
     this.each_el(function(e,x,y) {
@@ -300,7 +300,7 @@ Torus.prototype.draw_on = function(c) {
             if (coloured_grid) {
                 c.lineStyle(2,tt.domain_colour(x,y),1);
             }
-            tt.draw_edge_on(c,tt.crop(e2),tt.crop(e));
+            tt.draw_edge_on(c,tt.crop(e2),tt.crop(e),real_scale);
         });
     });
 };
@@ -309,23 +309,6 @@ Torus.prototype.crop = function(e) {
     return { x: mod(e.x, this.width), y: mod(e.y, this.height) };
 }
 
-Torus.prototype.update_plane = function(p) {
-	var t = this;
-    for (var x = 0; x <= t.width; x++) {
-        for (var y = 0; y <= t.height; y++) {
-            var e = t.el(x%t.width,y%t.height);
-			var ee = e;
-            if (x == t.width || y == t.height) {
-                var prev = (x == t.width) ? 
-					((y == t.width) ? t.el(t.width - 1, t.height - 1) : t.el(t.width - 1, y%t.height)) : 
-					t.el(x%t.height, t.height - 1);
-				ee = vadd(prev,t.minus(e,prev));
-            }
-            p.vertices[2*(t.width+1)*y + 2*x] = (ee.x/t.width)*glw;
-            p.vertices[2*(t.width+1)*y + 2*x+1] = (ee.y/t.height)*glh;
-        }
-    }
-};
 // }}}
 // {{{ Flow step operators
 var hmhf_step = function(t, dt) {
@@ -350,16 +333,8 @@ var flow_step = {
     hmhf: hmhf_step
 };
 // }}}
-
-var mouse_pos;
-var grid_size = 10;
-var draw_scale = 50;
-var canvas = $('canvas')[0];
-var renderer, plane, gfx, texture;
-var glw, glh;
-var t, idt;
-var coloured_grid = false;
-var pixel_ratio = function() {
+// {{{ Scalability support
+var __pixel_ratio = function(canvas) {
     var dpr = window.devicePixelRatio || 1;
     var ctx;
     try { ctx = canvas.getContext('webgl'); }
@@ -373,113 +348,156 @@ var pixel_ratio = function() {
     console.log(dpr/bsr);
     return dpr/bsr;
 }
+// }}}
+// {{{ TorusToy
+var TorusToy = function(canvas,image,size) {
+    this.canvas = canvas;
+    //$(canvas).css('max-width','92%').css('height','auto');
 
-var bump = function(x2) {
-    return x2 > 1 ? 0 : Math.exp(-1/(1-x2))*Math.E;
-}
+    this.mouse_pos = false;
+    this.glw = this.glh = Math.min($(canvas).width(), $(canvas).height());
+    var res = __pixel_ratio(canvas);
+    canvas.width = this.glw * res;
+    canvas.height = this.glh * res;
+    this.grid_size = size;
+    this.flow = 'diff';
 
-var mousemove = function(evt, touch) {
-    var rect = canvas.getBoundingClientRect();
-    var old_pos = mouse_pos;
-    mouse_pos = {
-        x: (evt.clientX-rect.left)/(rect.right-rect.left) * t.width,
-        y: (evt.clientY-rect.top)/(rect.bottom-rect.top) * t.height
+    this.renderer = PIXI.autoDetectRenderer(this.glw, this.glh, {
+        view: canvas,
+        backgroundColor: 0xffffff,
+        resolution: res
+    });
+    window.scrollTo(0,1);
+
+    this.texture = PIXI.Texture.fromImage(image);
+    this.gfx = new PIXI.Graphics();
+    this.timestep = 0.01;
+    this.flow_enabled = false;
+    this.drag_coeff = 5;
+    this.draw_grid = false;
+    this.coloured_grid = false;
+
+    // Initialize data structures and mesh
+    this.resize_reset(size);
+
+    // Start render loop
+    this.render();
+
+    setInterval(this.tick.bind(this),15);
+
+    var self = this;
+    var mousemove = function(evt, touch) {
+        var rect = self.canvas.getBoundingClientRect();
+        var old_pos = self.mouse_pos;
+        var t = self.torus;
+        self.mouse_pos = {
+            x: (evt.clientX-rect.left)/(rect.right-rect.left) * t.width,
+            y: (evt.clientY-rect.top)/(rect.bottom-rect.top) * t.height
+        };
+        if (('buttons' in evt && evt.buttons == 1) || (touch && old_pos !== false)) {
+            var impulse = t.minus(self.mouse_pos, old_pos);
+            t.mutate_el(function(e1,i,j) {
+                var scal = bump(t.d2(e1,old_pos)/(
+                    0.01*t.width*t.width*self.drag_coeff*self.drag_coeff))/2;
+                return vadd(e1, vscale(impulse,scal));
+            });
+        }
     };
-    if (('buttons' in evt && evt.buttons == 1) || (touch && old_pos !== false)) {
-        var impulse = t.minus(mouse_pos, old_pos);
-        var drag_coeff = $('#dcoeff')[0].value;
-        t.mutate_el(function(e1,i,j) {
-            var scal = bump(t.d2(e1,old_pos)/(0.01*t.width*t.width*drag_coeff*drag_coeff))/2;
-            return vadd(e1, vscale(impulse,scal));
-        });
-    }
-};
-$(canvas).on('mousemove',mousemove);
-$(canvas).on('touchmove', function(e) { 
-    mousemove(e.originalEvent.changedTouches[0], true); 
-    return false;
-});
-$(canvas).on('touchend', function(e) { mouse_pos = false; });
-
-var draw = function() {
-    //ctx.clearRect(0,0,canvas.width,canvas.height);
-    //t.draw_on(ctx);
+    $(canvas).on('mousemove',mousemove);
+    $(canvas).on('touchmove', function(e) { 
+        mousemove(e.originalEvent.changedTouches[0], true); 
+        return false;
+    });
+    $(canvas).on('touchend', function(e) { self.mouse_pos = false; });
 };
 
-var tick = function() {
-    draw();
-    var step_fn = flow_step[$('#flow')[0].value];
-    if ($('#toggle_flow')[0].checked) {
-        t = step_fn(t,$('#timestep')[0].value/100);
+TorusToy.prototype.resize_reset = function(size, word) {
+    if (word === undefined) word = '';
+    this.grid_size = size; //parseInt($('#size')[0].value);
+    this.draw_scale = this.canvas.width/size;
+    this.real_scale = this.glw/size;
+    this.plane = new PIXI.mesh.Plane(this.texture, size + 1, size + 1);
+    this.word_reset(word);
+};
+
+TorusToy.prototype.word_reset = function(input) {
+    var w = new Word(input.replace(/[^-stST]/g,''));
+    var m = w.toMatrix();
+    this.reset(function(x,y) {
+        return m.transform({x: x, y: y});
+    });
+};
+
+TorusToy.prototype.reset = function(f) {
+    if (f === undefined) {
+        f = function(x,y) { return { x: x, y: y }; };
     }
-	t.update_plane(plane);
-    var cm = t.CM();
+    this.torus = new Torus(this.grid_size,this.grid_size,f);
+};
+
+TorusToy.prototype.update_plane = function() {
+	var t = this.torus;
+    for (var x = 0; x <= t.width; x++) {
+        for (var y = 0; y <= t.height; y++) {
+            var e = t.el(x%t.width,y%t.height);
+			var ee = e;
+            if (x == t.width || y == t.height) {
+                var prev = (x == t.width) ? 
+					((y == t.width) ? t.el(t.width - 1, t.height - 1) : t.el(t.width - 1, y%t.height)) : 
+					t.el(x%t.height, t.height - 1);
+				ee = vadd(prev,t.minus(e,prev));
+            }
+            this.plane.vertices[2*(t.width+1)*y + 2*x] = (ee.x/t.width)*this.glw;
+            this.plane.vertices[2*(t.width+1)*y + 2*x+1] = (ee.y/t.height)*this.glh;
+        }
+    }
+};
+
+TorusToy.prototype.render = function() {
+    requestAnimationFrame(this.render.bind(this));
+
+    var w = this.glw;
+    var h = this.glh;
+
+    // render a bunch of translates 
+	for (var i = -3; i <= 3; i++) {
+		for (var j = -3; j <= 3; j++) {
+            this.plane.position = new PIXI.Point(w*i, h*j);
+            this.renderer.render(this.plane,null,false);
+		}
+	}
+
+    // draw grid
+    if (this.draw_grid === undefined || !this.draw_grid) return;
+    this.gfx.clear();
+    this.torus.draw_on(this.gfx,this.coloured_grid,this.real_scale);
+    this.renderer.render(this.gfx,null,false);
+};
+
+TorusToy.prototype.tick = function(flow) {
+    if (flow === undefined) flow = this.flow;
+    var step_fn = flow_step[flow];
+    if (this.flow_enabled) {
+        this.torus = step_fn(this.torus,this.timestep);
+    }
+    var t = this.torus;
+	this.update_plane();
+    var cm = this.torus.CM();
     if (cm.x > 1.1*t.width)     t.translateAll(-t.width, 0);
     if (cm.x < -0.1*t.width)    t.translateAll(t.width, 0);
     if (cm.y > 1.1*t.height)    t.translateAll(0, -t.height);
     if (cm.y < -0.1*t.height)   t.translateAll(0, t.height);
 };
-var reset = function(f) {
-    if (f === undefined) {
-        f = function(x,y) { return { x: x, y: y }; };
-    }
-    t = new Torus(grid_size,grid_size,f);
-    draw();
+
+TorusToy.prototype.swapImage = function(file) {
+    this.texture = PIXI.Texture.fromImage(file);
+    this.plane.texture = this.texture;
 };
 
-var word_reset = function() {
-    var input = $('#word')[0];
-    var w = new Word(input.value.replace(/[^-stST]/g,''));
-    input.value = w.toString();
-    var m = w.toMatrix();
-    reset(function(x,y) {
-        return m.transform({x: x, y: y});
-    });
-};
-$('#word_reset').on('click', word_reset);
+var bump = function(x2) {
+    return x2 > 1 ? 0 : Math.exp(-1/(1-x2))*Math.E;
+}
 
-var resize_reset = function() {
-    grid_size = parseInt($('#size')[0].value);
-    draw_scale = canvas.width/grid_size;
-    real_scale = glw/(grid_size);
-    plane = new PIXI.mesh.Plane(texture, grid_size + 1, grid_size + 1);
-    idt = new Torus(grid_size, grid_size);
-    word_reset();
-    //resize();
-    //reset();
-};
-
-var render = function() {
-    requestAnimationFrame(render);
-
-    var w=glw;
-    var h=glh;
-
-    // render a bunch of translates 
-	for (var i = -3; i <= 3; i++) {
-		for (var j = -3; j <= 3; j++) {
-            plane.position = new PIXI.Point(w*i, h*j);
-            renderer.render(plane,null,false);
-		}
-	}
-
-    // draw grid
-    if (t === undefined || !$('#draw_grid')[0].checked) return;
-    gfx.clear();
-    t.draw_on(gfx);
-    renderer.render(gfx,null,false);
-};
-
-$('#size').on('input change', resize_reset);
-$('#colour_grid').on('change', function() {
-    coloured_grid = $('#colour_grid')[0].checked;
-});
-$('#image').on('change', function() {
-    texture = PIXI.Texture.fromImage($('#image')[0].value);
-    plane.texture = texture;
-    //$('#domain')[0].src = $('#image')[0].value;
-    //resize_reset();
-});
 /*
 $('#show_domain').on('change', function() {
     if ($('#show_domain')[0].value) {
@@ -489,28 +507,3 @@ $('#show_domain').on('change', function() {
     }
 });
 */
-
-$(window).on('load',function() {
-    canvas.width = 512;
-    canvas.height = 512;
-    $(canvas).css('max-width','92%').css('height','auto');
-    glw = glh = Math.min($(canvas).width(), $(canvas).height());
-    renderer = PIXI.autoDetectRenderer(glw,glh, {
-        view: canvas,
-        backgroundColor: 0xffffff,
-        resolution: pixel_ratio()
-    });
-    window.scrollTo(0,1);
-
-    texture = PIXI.Texture.fromImage($('#image')[0].value);
-    gfx = new PIXI.Graphics();
-
-    // Initialize data structures and mesh
-    resize_reset();
-
-    // Start render loop
-    render();
-
-    setInterval(tick,15);
-});
-

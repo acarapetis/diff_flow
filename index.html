@@ -10,13 +10,13 @@
   </head>
   <body>
     <div id="controls"><form>
-      <input type="checkbox" name="toggle_flow" id="toggle_flow"> Toggle flow <br>
+      <input type="checkbox" name="flow_enabled" id="flow_enabled"> Toggle flow <br>
       <select id="flow">
         <option value="diff" selected="selected">Diffeomorphism-preserving flow</option>
         <option value="hmhf">Harmonic map heat flow</option>
       </select><br>
       <input type="range" name="timestep" min="1" max="10" value="1" id="timestep"> Timestep <br>
-      <input type="range" name="dcoeff" min="1" max="10" value="5" id="dcoeff"> Brush Size<br>
+      <input type="range" name="drag_coeff" min="1" max="10" value="5" id="drag_coeff"> Brush Size<br>
       <p>Use words in the generators 
           \(S = \left(\begin{matrix}0 &amp; -1 \\ 1 &amp; 0\end{matrix}\right),
           T = \left(\begin{matrix}1 &amp; 1  \\ 0 &amp; 1\end{matrix}\right),
@@ -25,7 +25,7 @@
       <input type="text" id="word"></input> <input type="button" id="word_reset" value="Reset in SL(2,Z)"> <br>
       <input type="range" name="size" id="size" value="20" min="5" max="50">Grid Resolution<br>
       <input type="checkbox" name="draw_grid" id="draw_grid"> Draw grid
-      <input type="checkbox" name="colour_grid" id="colour_grid"> Coloured grid <br>
+      <input type="checkbox" name="coloured_grid" id="coloured_grid"> Coloured grid <br>
       Image: <select id="image">
         <option value="chocdonut.png">donut</option>
         <option value="blank.png">blank</option>
@@ -42,6 +42,28 @@
     -->
     <canvas id="canvas"></canvas>
     <script type="text/javascript" src="main.js"></script>
+    <script type="text/javascript">
+      var canvas = $('canvas')[0];
+      $('canvas').width(300).height(300);
+      var ttoy = new TorusToy(canvas, 'chocdonut.png', 20);
+
+      var passthrough_vars = 'coloured_grid flow_enabled draw_grid flow drag_coeff'.split(' ');
+      passthrough_vars.forEach(function(str) {
+        var el = document.getElementById(str);
+        $(el).on('change', function() {
+            ttoy[str] = (el.checked === undefined) ? el.value : el.checked;
+        });
+      });
+      $('#image').on('change', function() {
+          ttoy.swapImage($('#image')[0].value);
+      });
+      $('#word_reset').on('click', function() {
+          ttoy.word_reset($('#word')[0].value);
+      });
+      $('#size').on('input change', function() {
+          ttoy.resize_reset($('#size')[0].value, $('#word_reset')[0].value);
+      });
+    </script>
   </body>
 </html>
 
