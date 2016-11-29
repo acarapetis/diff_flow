@@ -51,7 +51,7 @@
       passthrough_vars.forEach(function(str) {
         var el = document.getElementById(str);
         $(el).on('change', function() {
-            ttoy[str] = (el.checked === undefined) ? el.value : el.checked;
+            ttoy[str] = (el.type == "checkbox") ? el.checked : el.value;
         });
       });
       $('#image').on('change', function() {
