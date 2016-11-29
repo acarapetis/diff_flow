@@ -57,6 +57,9 @@
       $('#image').on('change', function() {
           ttoy.swapImage($('#image')[0].value);
       });
+      $('#timestep').on('change', function() {
+          ttoy.timestep = $('#timestep')[0].value/100;
+      });
       $('#word_reset').on('click', function() {
           ttoy.word_reset($('#word')[0].value);
       });
