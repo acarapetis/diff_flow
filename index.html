@@ -44,7 +44,7 @@
     <script type="text/javascript" src="main.js"></script>
     <script type="text/javascript">
       var canvas = $('canvas')[0];
-      $('canvas').width(300).height(300);
+      $('canvas').width(400).height(400);
       var ttoy = new TorusToy(canvas, 'chocdonut.png', 20);
 
       var passthrough_vars = 'coloured_grid flow_enabled draw_grid flow drag_coeff'.split(' ');
@@ -64,7 +64,7 @@
           ttoy.word_reset($('#word')[0].value);
       });
       $('#size').on('input change', function() {
-          ttoy.resize_reset($('#size')[0].value, $('#word_reset')[0].value);
+          ttoy.resize_reset($('#size')[0].value, $('#word')[0].value);
       });
     </script>
   </body>
