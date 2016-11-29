@@ -412,6 +412,7 @@ var TorusToy = function(canvas,image,size) {
 };
 
 TorusToy.prototype.resize_reset = function(size, word) {
+    size = parseInt(size)
     if (word === undefined) word = '';
     this.grid_size = size; //parseInt($('#size')[0].value);
     this.draw_scale = this.canvas.width/size;
