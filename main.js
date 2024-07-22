@@ -398,7 +398,7 @@ var TorusToy = function(canvas,image,size) {
             var impulse = t.minus(self.mouse_pos, old_pos);
             t.mutate_el(function(e1,i,j) {
                 var scal = bump(t.d2(e1,old_pos)/(
-                    0.01*t.width*t.width*self.drag_coeff*self.drag_coeff))/2;
+                    0.01*t.width*t.width*self.drag_coeff*self.drag_coeff))/3;
                 return vadd(e1, vscale(impulse,scal));
             });
         }
